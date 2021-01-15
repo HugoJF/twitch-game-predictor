@@ -1,40 +1,25 @@
 import cv2
-import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-import seaborn as sns
-import sklearn.preprocessing as preprocessing
-import multiprocessing
 from time import time
-from joblib import Parallel, delayed
 from sklearn.metrics import recall_score, precision_score, accuracy_score, confusion_matrix
 from sklearn.model_selection import LeaveOneOut
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
-from sklearn.tree import DecisionTreeClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
-from sklearn.naive_bayes import GaussianNB
 from sklearn.neural_network import MLPClassifier
-from sklearn.gaussian_process import GaussianProcessClassifier
-from sklearn.gaussian_process.kernels import RBF
 from sklearn.cluster import kmeans_plusplus
 from matplotlib import pylab
 from scipy import spatial
-from multiprocessing import Pool, freeze_support, cpu_count
-
-num_cores = multiprocessing.cpu_count()
-# results = Parallel(n_jobs=num_cores)(delayed(extract_features)(i) for i in image_paths())
 
 pylab.rcParams['figure.figsize'] = (16, 10)
 
 games = ['apex', 'bf3', 'cod', 'eft', 'fortnite', 'gtav', 'lol', 'minecraft', 'overwatch', 'phasmo', 'raft',
          'rocketleague', 'rust', 'science', 'tab', 'thesims4']
 images = 30
-k = 1024*4  # kmeans++ cluster count
+k = 5*1024  # kmeans++ cluster count
 
 # feats = cv2.xfeatures2d.SIFT_create(2500)
-feats = cv2.xfeatures2d.SURF_create(500, 6)
+feats = cv2.xfeatures2d.SURF_create(250, 7)
 # feats = cv2.ORB_create(nfeatures=1500)
 
 pool = list()
@@ -87,6 +72,7 @@ print('Feature pool size: ', len(pool))
 
 print('Clustering data...')
 clustering_start = time()
+
 centers_init, indices = kmeans_plusplus(np.array(pool), n_clusters=k, random_state=0)
 clustering_end = time()
 print('Clustering (k=%d) took %d secs' % (k, clustering_end - clustering_start))
@@ -143,14 +129,10 @@ print('Histogram building took %d secs' % (histo_end - histo_start))
 
 # Inicializa classificadores a serem utilizados
 classifiers = {
-    'knn':        KNeighborsClassifier(n_neighbors=4),
     'svm':        SVC(C=3),
-    'nb':         GaussianNB(),
-    'qda':        QuadraticDiscriminantAnalysis(),
-    'tree':       DecisionTreeClassifier(max_depth=4),
     'regression': LogisticRegression(random_state=0, solver='newton-cg', multi_class='multinomial', max_iter=500),
     'neural':     MLPClassifier(alpha=1, max_iter=1000),
-    'gaussian':   GaussianProcessClassifier(1.0 * RBF(1.0)),
+    'knn':        KNeighborsClassifier(n_neighbors=4),
 }
 
 # Aumenta o tamanho das imagens (matrizes de confusão)
