@@ -1,2 +1,5 @@
 venv
 .idea/
+images/
+images_cleaned/
+images_cleaned.zip
