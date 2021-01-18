@@ -1,28 +1,38 @@
 import cv2
 import numpy as np
-from time import time
+import seaborn as sns
 from sklearn.metrics import recall_score, precision_score, accuracy_score, confusion_matrix
 from sklearn.model_selection import LeaveOneOut
+from sklearn.neural_network import MLPClassifier
+from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
-from sklearn.linear_model import LogisticRegression
-from sklearn.neural_network import MLPClassifier
-from sklearn.cluster import kmeans_plusplus
 from matplotlib import pylab
+from libKMCUDA import kmeans_cuda
 from scipy import spatial
+from time import time
 
+# Increase size of figures
 pylab.rcParams['figure.figsize'] = (16, 10)
 
+# Classes
 games = ['apex', 'bf3', 'cod', 'eft', 'fortnite', 'gtav', 'lol', 'minecraft', 'overwatch', 'phasmo', 'raft',
          'rocketleague', 'rust', 'science', 'tab', 'thesims4']
-images = 30
-k = 5*1024  # kmeans++ cluster count
 
+# Images to use in this
+images = 30
+k = 5 * 1024  # kmeans++ cluster count
+
+# Feature descriptors
 # feats = cv2.xfeatures2d.SIFT_create(2500)
 feats = cv2.xfeatures2d.SURF_create(250, 7)
 # feats = cv2.ORB_create(nfeatures=1500)
 
+# Feature pool
 pool = list()
+
+# Memory feature cache [path]: [features]
+feature_cache = {}
 
 
 def image_path(game, i):
@@ -37,9 +47,6 @@ def image_paths():
             imgs.append(image_path(game, i))
 
     return imgs
-
-
-feature_cache = {}
 
 
 def extract_features(path):
@@ -57,45 +64,6 @@ def extract_features(path):
     return feature_cache[path]
 
 
-# Quickly check if every image exist before start extracting features
-for path in image_paths():
-    f = open(path)
-    f.close()
-
-feature_start = time()
-for path in image_paths():
-    keypoints, descriptors = extract_features(path)
-    pool.extend(descriptors)
-feature_end = time()
-print('Feature extraction took %d secs' % (feature_end - feature_start))
-print('Feature pool size: ', len(pool))
-
-print('Clustering data...')
-clustering_start = time()
-
-centers_init, indices = kmeans_plusplus(np.array(pool), n_clusters=k, random_state=0)
-clustering_end = time()
-print('Clustering (k=%d) took %d secs' % (k, clustering_end - clustering_start))
-
-
-def indices_to_centers(i):
-    return pool[i]
-
-
-centers = list(map(indices_to_centers, indices))
-
-print('done')
-
-tree = spatial.KDTree(centers)
-
-# Carrega dataset
-path = 'images/pred.png'
-print(path)
-
-x = list()
-y = list()
-
-
 def build_histogram(path, centers):
     keypoints, descriptors = extract_features(path)
 
@@ -108,8 +76,68 @@ def build_histogram(path, centers):
     return histo
 
 
+def indices_to_centers(i):
+    return pool[i]
+
+
+def is_not_nan(n):
+    c = np.sum(n)
+    return not np.isnan(c)
+
+
+# Quickly check if every image exist before start extracting features
+for path in image_paths():
+    f = open(path)
+    f.close()
+
+
+############################
+# Feature extraction phase #
+############################
+
+
+print('Starting feature extraction...')
+feature_start = time()
+
+for path in image_paths():
+    keypoints, descriptors = extract_features(path)
+    pool.extend(descriptors)
+
+feature_end = time()
+print('Feature extraction took %d secs' % (feature_end - feature_start))
+
+print('Feature pool size: ', len(pool))
+
+####################
+# Clustering phase #
+####################
+
+
+print('Clustering data...')
+clustering_start = time()
+
+# centers_init, indices = kmeans_plusplus(np.array(pool), n_clusters=k, random_state=0)
+centers, assignments = kmeans_cuda(np.array(pool), clusters=k, verbosity=0, seed=0)
+
+clustering_end = time()
+print('Clustering (k=%d) took %d secs' % (k, clustering_end - clustering_start))
+
+print('Centers before filtering: %d' % len(centers))
+centers = list(filter(is_not_nan, centers))
+print('Centers after filtering: %d' % len(centers))
+
+###################
+# Histogram phase #
+###################
+
+
 print('Building histograms...')
 histo_start = time()
+tree = spatial.KDTree(centers)
+
+x = list()
+y = list()
+
 for game in games:
     for i in range(0, images):
         path = image_path(game, i)
@@ -120,11 +148,14 @@ for game in games:
 
         x.append(histo)
         y.append(game)
+
 histo_end = time()
 print('Histogram building took %d secs' % (histo_end - histo_start))
 
-# xn = x
-# x = preprocessing.normalize(x, norm='l1')
+
+########################
+# Classification phase #
+########################
 
 
 # Inicializa classificadores a serem utilizados
@@ -134,9 +165,6 @@ classifiers = {
     'neural':     MLPClassifier(alpha=1, max_iter=1000),
     'knn':        KNeighborsClassifier(n_neighbors=4),
 }
-
-# Aumenta o tamanho das imagens (matrizes de confusão)
-pylab.rcParams['figure.figsize'] = (10, 6)
 
 npx = np.array(x)
 npy = np.array(y)
@@ -167,7 +195,6 @@ for name, classifier in classifiers.items():
         true = y_test
 
         # Adiciona na lista de predições
-        # TODO: mudar para tuplas
         trues.append(true[0])
         preds.append(pred[0])
 
@@ -180,24 +207,23 @@ for name, classifier in classifiers.items():
     print('Accuracy=', accuracy_score(trues, preds))
 
     # Lista de todos as classes sem repetição
-    # TODO: isso faz sentido? nao perde a ordem?
     labels = list(set(trues))
 
     # Gera matriz de confusão
     matrix = confusion_matrix(trues, preds, labels=labels)
 
     # Inicia plot para matriz de confusão
-    # ax = plt.subplot()
-    # sns.heatmap(matrix, annot=True, ax=ax)  # annot=True to annotate cells
+    ax = plt.subplot()
+    sns.heatmap(matrix, annot=True, ax=ax)  # annot=True to annotate cells
 
     # labels, title and ticks
-    # ax.set_title('Confusion Matrix')
+    ax.set_title('Confusion Matrix')
 
-    # ax.set_xlabel('Predicted labels')
-    # ax.set_ylabel('True labels')
+    ax.set_xlabel('Predicted labels')
+    ax.set_ylabel('True labels')
 
-    # ax.xaxis.set_ticklabels(labels)
-    # ax.yaxis.set_ticklabels(labels)
+    ax.xaxis.set_ticklabels(labels)
+    ax.yaxis.set_ticklabels(labels)
 
     # Printa matriz em texto
     print(matrix)
@@ -206,28 +232,4 @@ for name, classifier in classifiers.items():
     print()
 
     # Mostra matriz imagem
-    # plt.show()
-
-# Texto para ser testado
-url = 'https://i.imgur.com/DT0zhfV.png'  # @param {type:"string"}
-path = 'images/pred.png'
-
-# !wget $url - O / content / drive / My\ Drive / Colab\ Notebooks / twitch - game - predictor / pred.png
-
-# Itera classificadores
-for name, model in classifiers.items():
-    # Separa texto e intenção do dataset
-    x = npx
-    y = npy
-
-    # Treina modelo
-    model.fit(x, y)
-
-    # Vetoriza teste
-    test = build_histogram(path, centers)
-
-    # Prediz
-    pred = model.predict([test])
-
-    # Printa predição
-    print(name, '=', pred[0])
+    plt.show()
