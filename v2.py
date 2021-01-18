@@ -12,6 +12,7 @@ data_dir="C:\\Users\\hugo_\\Code\\twitch-game-predictor\\images_cleaned"
 batch_size = 32
 img_height = 360
 img_width = 640
+epochs = 10
 
 train_ds = tf.keras.preprocessing.image_dataset_from_directory(
   data_dir,
@@ -79,12 +80,13 @@ model.compile(optimizer='adam',
 
 model.summary()
 
-epochs=20
 history = model.fit(
   train_ds,
   validation_data=val_ds,
   epochs=epochs
 )
+
+model.save('models/trained')
 
 acc = history.history['accuracy']
 val_acc = history.history['val_accuracy']
