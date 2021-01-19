@@ -3,3 +3,8 @@ venv
 images/
 images_cleaned/
 images_cleaned.zip
+__pycache__/
+codbocw/
+a/
+test/
+models/

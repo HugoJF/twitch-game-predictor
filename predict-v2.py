@@ -23,8 +23,8 @@ class_names = list(sorted(map(base, class_names)))  # Sorting them
 print('Class names')
 print(class_names)
 
-model = tf.keras.models.load_model('models/trained')
-
+modelv1 = tf.keras.models.load_model('models/trained-1k')
+modelv2 = tf.keras.models.load_model('models/trained-2k')
 
 sunflower_path = tf.keras.utils.get_file('eu-%f' % time(), origin=sys.argv[1])
 img = keras.preprocessing.image.load_img(
@@ -33,12 +33,26 @@ img = keras.preprocessing.image.load_img(
 img_array = keras.preprocessing.image.img_to_array(img)
 img_array = tf.expand_dims(img_array, 0)  # Create a batch
 
-predictions = model.predict(img_array)
-score = tf.nn.softmax(predictions[0])
+s1 = time()
+predictionsv1 = modelv1.predict(img_array)
+e1 = time()
+print("v1 predicted in %d" % ((e1 - s1) * 1000))
+scorev1 = tf.nn.softmax(predictionsv1[0])
+
+
+s2 = time()
+predictionsv2 = modelv2.predict(img_array)
+e2 = time()
+print("v2 predicted in %d" % ((e2 - s2) * 1000))
+scorev2 = tf.nn.softmax(predictionsv2[0])
 
 for i in range(0, 20):
     print()
 print(
-    "This image most likely belongs to {} with a {:.2f} percent confidence."
-        .format(class_names[np.argmax(score)], 100 * np.max(score))
+    "v1 = This image most likely belongs to {} with a {:.2f} percent confidence."
+        .format(class_names[np.argmax(scorev1)], 100 * np.max(scorev1))
+)
+print(
+    "v2 = This image most likely belongs to {} with a {:.2f} percent confidence."
+        .format(class_names[np.argmax(scorev2)], 100 * np.max(scorev2))
 )
