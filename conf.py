@@ -10,7 +10,7 @@ from keras.preprocessing.image import ImageDataGenerator
 from sklearn.metrics import classification_report, confusion_matrix
 
 # Start
-test_data_path = "C:\\Users\\hugo_\\Code\\twitch-game-predictor\\test"
+test_data_path = "C:\\Users\\hugo_\\Code\\twitch-game-predictor\\images_cleaned"
 img_height = 360
 img_width = 640
 batch_size = 1
